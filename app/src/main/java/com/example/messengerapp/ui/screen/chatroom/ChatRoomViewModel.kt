@@ -6,15 +6,16 @@ import androidx.lifecycle.viewModelScope
 import com.example.messengerapp.domain.model.ChatMessage
 import com.example.messengerapp.domain.repository.AuthRepository
 import com.example.messengerapp.domain.repository.ChatRepository
+import com.example.messengerapp.util.ImageMessageCodec
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,26 +30,14 @@ class ChatRoomViewModel @Inject constructor(
 
     val roomId: String = checkNotNull(savedStateHandle["roomId"])
 
-    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
+    private val _uiState = MutableStateFlow(ChatRoomUiState())
+    val uiState: StateFlow<ChatRoomUiState> = _uiState.asStateFlow()
 
-    private val _isSending = MutableStateFlow(false)
-    val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
-
-    private val _isLoadingOlder = MutableStateFlow(false)
-    val isLoadingOlder: StateFlow<Boolean> = _isLoadingOlder.asStateFlow()
-
-    private val _myUserId = MutableStateFlow("")
-    val myUserId: StateFlow<String> = _myUserId.asStateFlow()
+    /** メッセージ一覧の生データ（昇順）。listItems の導出元 */
+    private var messages: List<ChatMessage> = emptyList()
 
     /** 既読日時（サーバがルーム×ユーザ単位で保有）。null は未取得 */
-    private val _lastReadAt = MutableStateFlow<Long?>(null)
-
-    /** 日付区切り・未読境界を含む表示用リスト */
-    val listItems: StateFlow<List<ChatRoomListItem>> =
-        combine(_messages, _lastReadAt, _myUserId) { messages, lastReadAt, myUserId ->
-            buildListItems(messages, lastReadAt, myUserId)
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private var lastReadAt: Long? = null
 
     init {
         loadSession()
@@ -58,19 +47,30 @@ class ChatRoomViewModel @Inject constructor(
 
     private fun loadSession() {
         viewModelScope.launch {
-            _myUserId.value = authRepository.getSession().userId ?: ""
+            val userId = authRepository.getSession().userId ?: ""
+            _uiState.update { it.copy(myUserId = userId) }
+            rebuildListItems()
         }
     }
 
     private fun loadReadState() {
         viewModelScope.launch {
-            _lastReadAt.value = chatRepository.getLastReadAt(roomId)
+            lastReadAt = chatRepository.getLastReadAt(roomId)
+            rebuildListItems()
         }
     }
 
     private fun loadMessages() {
         viewModelScope.launch {
-            _messages.value = chatRepository.getMessages(roomId)
+            messages = chatRepository.getMessages(roomId)
+            rebuildListItems()
+        }
+    }
+
+    /** messages / lastReadAt / myUserId の変更を表示用リストへ反映する */
+    private fun rebuildListItems() {
+        _uiState.update {
+            it.copy(listItems = buildListItems(messages, lastReadAt, it.myUserId))
         }
     }
 
@@ -112,10 +112,10 @@ class ChatRoomViewModel @Inject constructor(
     }
 
     fun loadOlderMessages() {
-        if (_isLoadingOlder.value) return
-        val oldest = _messages.value.firstOrNull() ?: return
+        if (_uiState.value.isLoadingOlder) return
+        val oldest = messages.firstOrNull() ?: return
         viewModelScope.launch {
-            _isLoadingOlder.value = true
+            _uiState.update { it.copy(isLoadingOlder = true) }
             val startedAt = System.currentTimeMillis()
             try {
                 val older = chatRepository.getMessagesBefore(
@@ -123,9 +123,10 @@ class ChatRoomViewModel @Inject constructor(
                     beforeMessageId = oldest.messageId,
                     beforeSentAt = oldest.sentAt
                 )
-                _messages.value = (older + _messages.value)
+                messages = (older + messages)
                     .distinctBy { it.messageId }
                     .sortedBy { it.sentAt }
+                rebuildListItems()
             } finally {
                 // 取得が一瞬で終わると UI 側が true への遷移を観測できず
                 // インジケータが消えなくなるため、最低表示時間を確保する
@@ -133,7 +134,7 @@ class ChatRoomViewModel @Inject constructor(
                 if (elapsed < MIN_REFRESH_INDICATOR_MILLIS) {
                     delay(MIN_REFRESH_INDICATOR_MILLIS - elapsed)
                 }
-                _isLoadingOlder.value = false
+                _uiState.update { it.copy(isLoadingOlder = false) }
             }
         }
     }
@@ -141,10 +142,69 @@ class ChatRoomViewModel @Inject constructor(
     fun sendMessage(body: String) {
         if (body.isBlank()) return
         viewModelScope.launch {
-            _isSending.value = true
+            _uiState.update { it.copy(isSending = true) }
             val sent = chatRepository.sendMessage(roomId, body)
-            _messages.value += sent
-            _isSending.value = false
+            messages = messages + sent
+            rebuildListItems()
+            _uiState.update { it.copy(isSending = false) }
+        }
+    }
+
+    // --- カメラ・写真メッセージ ---
+
+    /** チャット画面からカメラ画面を開く */
+    fun openCamera() {
+        _uiState.update { it.copy(displayState = ChatRoomDisplayState.Camera) }
+    }
+
+    /** カメラ画面を閉じてチャット画面へ戻る */
+    fun closeCamera() {
+        _uiState.update {
+            it.copy(displayState = ChatRoomDisplayState.Chat, capturedPhotoJpeg = null)
+        }
+    }
+
+    /** 撮影完了。撮影データをメモリ保持して撮影結果確認画面へ */
+    fun onPhotoCaptured(jpegBytes: ByteArray) {
+        _uiState.update {
+            it.copy(
+                displayState = ChatRoomDisplayState.PhotoPreview,
+                capturedPhotoJpeg = jpegBytes
+            )
+        }
+    }
+
+    /** 撮影結果確認画面から、カメラ設定を維持したままカメラ画面へ戻る */
+    fun backToCamera() {
+        _uiState.update {
+            it.copy(displayState = ChatRoomDisplayState.Camera, capturedPhotoJpeg = null)
+        }
+    }
+
+    /** カメラ画面での設定変更（ズーム・フラッシュ・露光）を保持する */
+    fun updateCameraSettings(settings: CameraSettings) {
+        _uiState.update { it.copy(cameraSettings = settings) }
+    }
+
+    /** 撮影画像を送信形式(Base64)へ変換して写真メッセージとして送信する */
+    fun sendPhotoMessage() {
+        val jpeg = _uiState.value.capturedPhotoJpeg ?: return
+        if (_uiState.value.isSending) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSending = true) }
+            val imageBase64 = withContext(Dispatchers.Default) {
+                ImageMessageCodec.encodeJpegBytesToBase64(jpeg)
+            }
+            val sent = chatRepository.sendImageMessage(roomId, imageBase64)
+            messages = messages + sent
+            rebuildListItems()
+            _uiState.update {
+                it.copy(
+                    isSending = false,
+                    displayState = ChatRoomDisplayState.Chat,
+                    capturedPhotoJpeg = null
+                )
+            }
         }
     }
 

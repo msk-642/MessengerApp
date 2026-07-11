@@ -1,6 +1,8 @@
 package com.example.messengerapp.ui.screen.chatroom
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,32 +12,78 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.messengerapp.domain.model.ChatMessage
+import com.example.messengerapp.domain.model.MessageType
+import com.example.messengerapp.ui.screen.chatroom.camera.CameraCaptureScreen
+import com.example.messengerapp.ui.screen.chatroom.camera.PhotoPreviewScreen
+import com.example.messengerapp.util.ImageMessageCodec
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * チャットルーム配下のルート Composable。
+ * 表示中画面状態(ChatRoomDisplayState)に応じて
+ * チャット / カメラ / 撮影結果確認 の各画面を切り替える。
+ */
 @Composable
 fun ChatRoomScreen(
     roomId: String,
     onNavigateBack: () -> Unit,
     viewModel: ChatRoomViewModel = hiltViewModel()
 ) {
-    val listItems by viewModel.listItems.collectAsState()
-    val isSending by viewModel.isSending.collectAsState()
-    val isLoadingOlder by viewModel.isLoadingOlder.collectAsState()
-    val myUserId by viewModel.myUserId.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+
+    when (uiState.displayState) {
+        ChatRoomDisplayState.Chat -> ChatRoomContent(
+            uiState = uiState,
+            onNavigateBack = onNavigateBack,
+            onSendMessage = viewModel::sendMessage,
+            onLoadOlderMessages = viewModel::loadOlderMessages,
+            onOpenCamera = viewModel::openCamera
+        )
+
+        ChatRoomDisplayState.Camera -> CameraCaptureScreen(
+            cameraSettings = uiState.cameraSettings,
+            onSettingsChange = viewModel::updateCameraSettings,
+            onPhotoCaptured = viewModel::onPhotoCaptured,
+            onClose = viewModel::closeCamera
+        )
+
+        ChatRoomDisplayState.PhotoPreview -> PhotoPreviewScreen(
+            photoJpeg = uiState.capturedPhotoJpeg,
+            isSending = uiState.isSending,
+            onBack = viewModel::backToCamera,
+            onSend = viewModel::sendPhotoMessage
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatRoomContent(
+    uiState: ChatRoomUiState,
+    onNavigateBack: () -> Unit,
+    onSendMessage: (String) -> Unit,
+    onLoadOlderMessages: () -> Unit,
+    onOpenCamera: () -> Unit
+) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+    val listItems = uiState.listItems
 
     // 最後尾のアイテム(常に通常メッセージ)が変わった時のみ最下部へスクロールする
     // (過去メッセージの先頭追加ではスクロール位置を維持する)
@@ -46,6 +94,9 @@ fun ChatRoomScreen(
     }
 
     Scaffold(
+        modifier = Modifier.pointerInput(Unit) {
+            detectTapGestures(onTap = { focusManager.clearFocus() })
+        },
         topBar = {
             Column(
                 modifier = Modifier
@@ -83,6 +134,14 @@ fun ChatRoomScreen(
                         .imePadding(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(onClick = onOpenCamera) {
+                        Icon(
+                            Icons.Outlined.PhotoCamera,
+                            contentDescription = "カメラを起動",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
@@ -101,7 +160,8 @@ fun ChatRoomScreen(
                     FloatingActionButton(
                         onClick = {
                             if (inputText.isNotBlank()) {
-                                viewModel.sendMessage(inputText)
+                                focusManager.clearFocus()
+                                onSendMessage(inputText)
                                 inputText = ""
                             }
                         },
@@ -135,8 +195,8 @@ fun ChatRoomScreen(
                 )
         ) {
             PullToRefreshBox(
-                isRefreshing = isLoadingOlder,
-                onRefresh = viewModel::loadOlderMessages,
+                isRefreshing = uiState.isLoadingOlder,
+                onRefresh = onLoadOlderMessages,
                 modifier = Modifier.fillMaxSize()
             ) {
                 LazyColumn(
@@ -156,7 +216,7 @@ fun ChatRoomScreen(
                             is ChatRoomListItem.UnreadBoundary -> UnreadBoundaryItem()
                             is ChatRoomListItem.Message -> MessageBubble(
                                 message = item.message,
-                                isMyMessage = item.message.senderId == myUserId
+                                isMyMessage = item.message.senderId == uiState.myUserId
                             )
                         }
                     }
@@ -248,12 +308,15 @@ private fun MessageBubble(
                 shape = bubbleShape,
                 color = bubbleColor
             ) {
-                Text(
-                    text = message.body,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = textColor,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                when (message.messageType) {
+                    MessageType.IMAGE -> ImageMessageContent(message, textColor)
+                    MessageType.TEXT -> Text(
+                        text = message.body,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        color = textColor,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
             Text(
                 text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.sentAt)),
@@ -262,5 +325,37 @@ private fun MessageBubble(
                 modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
             )
         }
+    }
+}
+
+/**
+ * 写真メッセージの表示。
+ * メッセージが保持する Base64 データをメモリ上でデコードして表示する（ディスクキャッシュなし）。
+ */
+@Composable
+private fun ImageMessageContent(
+    message: ChatMessage,
+    textColor: androidx.compose.ui.graphics.Color
+) {
+    val imageBitmap = remember(message.messageId) {
+        message.imageBase64?.let { ImageMessageCodec.decodeBase64ToImageBitmap(it) }
+    }
+    if (imageBitmap != null) {
+        val aspectRatio = imageBitmap.width.toFloat() / imageBitmap.height.toFloat()
+        Image(
+            bitmap = imageBitmap,
+            contentDescription = "写真メッセージ",
+            modifier = Modifier
+                .width(220.dp)
+                .aspectRatio(aspectRatio),
+            contentScale = ContentScale.Fit
+        )
+    } else {
+        Text(
+            text = "画像を表示できません",
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            color = textColor,
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
