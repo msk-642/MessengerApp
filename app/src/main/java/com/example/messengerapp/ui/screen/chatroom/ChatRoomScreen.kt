@@ -1,6 +1,7 @@
 package com.example.messengerapp.ui.screen.chatroom
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.messengerapp.domain.model.ChatMessage
@@ -36,6 +39,7 @@ fun ChatRoomScreen(
     val myUserId by viewModel.myUserId.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
 
     // 最後尾のアイテム(常に通常メッセージ)が変わった時のみ最下部へスクロールする
     // (過去メッセージの先頭追加ではスクロール位置を維持する)
@@ -46,6 +50,9 @@ fun ChatRoomScreen(
     }
 
     Scaffold(
+        modifier = Modifier.pointerInput(Unit) {
+            detectTapGestures(onTap = { focusManager.clearFocus() })
+        },
         topBar = {
             Column(
                 modifier = Modifier
@@ -101,6 +108,7 @@ fun ChatRoomScreen(
                     FloatingActionButton(
                         onClick = {
                             if (inputText.isNotBlank()) {
+                                focusManager.clearFocus()
                                 viewModel.sendMessage(inputText)
                                 inputText = ""
                             }
