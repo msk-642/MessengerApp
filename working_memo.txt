@@ -1,0 +1,27 @@
+topBar が画面外に押し出されるのは、キーボード表示時にウィンドウが adjustPan（画面全体を上にスライドさせる）モードで動いているのが原因です。改善は Manifest で android:windowSoftInputMode="adjustResize" を指定し、Compose 側で IME インセット（imePadding()）を処理する、が基本形です。
+
+仕組みの説明
+Android はキーボード表示時のウィンドウの挙動を windowSoftInputMode で決めます。
+
+adjustPan: ウィンドウのサイズは変えず、フォーカス中の入力欄がキーボードに隠れないようウィンドウ全体を上に平行移動します。レイアウトの再計算は起きないため、押し出された topBar はそのまま画面外に消えます。今の実業務アプリの症状はまさにこれです。
+adjustResize: ウィンドウの高さ自体をキーボード分だけ縮めます（エッジツーエッジの場合は縮める代わりに IME インセットとしてアプリに通知）。レイアウトが再計算されるので topBar は画面上部に留まり、下部の入力欄だけが持ち上がります。
+何も指定しない場合のデフォルトは adjustUnspecified で、システムがレイアウトを見て pan か resize を勝手に選びます。スクロール可能なコンテナが検出できない構成などでは pan が選ばれがちで、「指定した覚えがないのに pan になっている」ケースは珍しくありません。もちろん、Manifest やテーマで明示的に adjustPan が指定されている可能性もあるので、まずそこを確認してください。
+
+このプロトタイプが正しく動いている理由（比較）
+MessengerApp では次の 2 点の組み合わせで期待どおりに動いています。
+
+MainActivity.kt:33 で enableEdgeToEdge() を呼んでいる → ウィンドウは常に全画面のまま、キーボードの高さが「IME インセット」としてアプリに通知される（pan は発生しない）
+ChatRoomScreen.kt:90 の bottomBar に .imePadding() を付けている → 通知されたインセット分だけ入力欄が自力で持ち上がる
+つまり「ウィンドウを動かさず、必要な部分（入力欄）だけがインセットに反応して動く」構造です。
+
+実業務アプリでの改善手順
+AndroidManifest.xml の対象 Activity に以下を指定（adjustPan が書かれていたら置き換え）:
+<activity
+    android:name=".MainActivity"
+    android:windowSoftInputMode="adjustResize" />
+入力欄側で IME インセットを消費する。Scaffold の bottomBar（または入力欄を含むコンテナ）に:
+Modifier
+    .navigationBarsPadding()
+    .imePadding()
+エッジツーエッジ（enableEdgeToEdge()）を使っている場合も考え方は同じで、imePadding() が必須になります。targetSdk 35 以降はエッジツーエッジが強制されるため、今後はこの形が標準です。
+補足として、adjustResize にしたのに入力欄がキーボードに隠れるようになった場合は、インセットの二重適用・未適用が原因のことが多いです（例: Scaffold の contentWindowInsets と imePadding() の併用で余白が二重になる、逆にどこでも imePadding() していなくて隠れる）。その際は「IME インセットをどのコンポーザブルが 1 回だけ消費するか」を決めて整理すると解決します。
