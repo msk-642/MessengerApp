@@ -6,6 +6,7 @@ import com.example.messengerapp.data.remote.dto.SendMessageRequest
 import com.example.messengerapp.domain.model.ChatMessage
 import com.example.messengerapp.domain.model.ChatRoom
 import com.example.messengerapp.domain.model.Friend
+import com.example.messengerapp.domain.model.MessageType
 import com.example.messengerapp.domain.repository.AuthRepository
 import com.example.messengerapp.domain.repository.ChatRepository
 import kotlinx.coroutines.flow.Flow
@@ -161,6 +162,49 @@ class ChatRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun sendImageMessage(roomId: String, imageBase64: String): ChatMessage {
+        return try {
+            val session = authRepository.getSession()
+            val response = chatApi.sendMessage(
+                token = "Bearer ${session.token ?: ""}",
+                roomId = roomId,
+                request = SendMessageRequest(
+                    body = "",
+                    messageType = MessageType.IMAGE.name,
+                    imageBase64 = imageBase64
+                )
+            )
+            val newMessage = ChatMessage(
+                messageId = response.messageId,
+                roomId = response.roomId,
+                senderId = response.senderId,
+                senderName = response.senderName,
+                body = response.body,
+                sentAt = response.sentAt,
+                messageType = MessageType.IMAGE,
+                imageBase64 = response.imageBase64 ?: imageBase64
+            )
+            updateChatRoomLastMessage(roomId, IMAGE_LAST_MESSAGE_LABEL, newMessage.sentAt)
+            newMessage
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // プロトタイプ用フォールバック（本番では削除）
+            val session = authRepository.getSession()
+            val newMessage = ChatMessage(
+                messageId = "msg_${System.currentTimeMillis()}",
+                roomId = roomId,
+                senderId = session.userId ?: "me",
+                senderName = session.userName ?: "自分",
+                body = "",
+                sentAt = System.currentTimeMillis(),
+                messageType = MessageType.IMAGE,
+                imageBase64 = imageBase64
+            )
+            updateChatRoomLastMessage(roomId, IMAGE_LAST_MESSAGE_LABEL, newMessage.sentAt)
+            newMessage
+        }
+    }
+
     override suspend fun getFriends(): List<Friend> {
         return try {
             val token = authRepository.getSession().token ?: ""
@@ -229,5 +273,6 @@ class ChatRepositoryImpl @Inject constructor(
         private const val INITIAL_LOAD_LIMIT = 100
         private const val OLDER_LOAD_LIMIT = 50
         private const val DAY_MILLIS = 24 * 60 * 60_000L
+        private const val IMAGE_LAST_MESSAGE_LABEL = "📷 写真"
     }
 }

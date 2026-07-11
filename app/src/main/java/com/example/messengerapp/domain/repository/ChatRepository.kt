@@ -11,6 +11,7 @@ interface ChatRepository {
     suspend fun getMessagesBefore(roomId: String, beforeMessageId: String, beforeSentAt: Long): List<ChatMessage>
     suspend fun getLastReadAt(roomId: String): Long
     suspend fun sendMessage(roomId: String, body: String): ChatMessage
+    suspend fun sendImageMessage(roomId: String, imageBase64: String): ChatMessage
     suspend fun getFriends(): List<Friend>
     suspend fun createGroup(name: String, memberIds: List<String>): Result<ChatRoom>
 }

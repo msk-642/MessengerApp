@@ -1,7 +1,9 @@
 package com.example.messengerapp.data.remote.dto
 
 data class SendMessageRequest(
-    val body: String
+    val body: String,
+    val messageType: String = "TEXT",
+    val imageBase64: String? = null
 )
 
 data class CreateGroupRequest(
@@ -15,7 +17,9 @@ data class ChatMessageDto(
     val senderId: String,
     val senderName: String,
     val body: String,
-    val sentAt: Long
+    val sentAt: Long,
+    val messageType: String? = null,
+    val imageBase64: String? = null
 )
 
 data class ChatRoomDto(
