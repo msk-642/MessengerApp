@@ -47,6 +47,12 @@ interface ChatApi {
         @Body request: SendMessageRequest
     ): ChatMessageDto
 
+    @GET("api/v1/chats/{roomId}/members")
+    suspend fun getRoomMembers(
+        @Header("Authorization") token: String,
+        @Path("roomId") roomId: String
+    ): List<FriendDto>
+
     @POST("api/v1/chats")
     suspend fun createGroup(
         @Header("Authorization") token: String,

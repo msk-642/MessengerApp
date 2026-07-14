@@ -2,8 +2,8 @@ package com.example.messengerapp.data.repository
 
 import androidx.datastore.core.DataStore
 import com.example.messengerapp.data.remote.AuthApi
-import com.example.messengerapp.data.remote.AuthResponse
-import com.example.messengerapp.data.remote.LoginRequest
+import com.example.messengerapp.data.remote.dto.AuthResponse
+import com.example.messengerapp.data.remote.dto.LoginRequest
 import com.example.messengerapp.domain.model.UserSession
 import io.mockk.*
 import kotlinx.coroutines.flow.flowOf
