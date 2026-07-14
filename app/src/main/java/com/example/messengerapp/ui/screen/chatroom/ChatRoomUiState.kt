@@ -26,6 +26,9 @@ data class ChatRoomUiState(
     /** 日付区切り・未読境界を含む表示用リスト */
     val listItems: List<ChatRoomListItem> = emptyList(),
     val myUserId: String = "",
+    val myUserName: String = "",
+    /** ルーム参加メンバーの名前一覧（メンション判定用） */
+    val memberNames: List<String> = emptyList(),
     val isSending: Boolean = false,
     val isLoadingOlder: Boolean = false,
     val displayState: ChatRoomDisplayState = ChatRoomDisplayState.Chat,

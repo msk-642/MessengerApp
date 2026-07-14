@@ -205,6 +205,23 @@ class ChatRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getRoomMembers(roomId: String): List<Friend> {
+        return try {
+            val token = authRepository.getSession().token ?: ""
+            chatApi.getRoomMembers("Bearer $token", roomId).map {
+                Friend(it.userId, it.userName, it.statusMessage)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // プロトタイプ用フォールバック（本番では削除）: モックメッセージの送信者と整合させる
+            val session = authRepository.getSession()
+            listOf(
+                Friend(session.userId ?: "me", session.userName ?: "自分", null),
+                Friend("other", "相手", null)
+            )
+        }
+    }
+
     override suspend fun getFriends(): List<Friend> {
         return try {
             val token = authRepository.getSession().token ?: ""

@@ -43,13 +43,27 @@ class ChatRoomViewModel @Inject constructor(
         loadSession()
         loadReadState()
         loadMessages()
+        loadMembers()
     }
 
     private fun loadSession() {
         viewModelScope.launch {
-            val userId = authRepository.getSession().userId ?: ""
-            _uiState.update { it.copy(myUserId = userId) }
+            val session = authRepository.getSession()
+            _uiState.update {
+                it.copy(
+                    myUserId = session.userId ?: "",
+                    myUserName = session.userName ?: ""
+                )
+            }
             rebuildListItems()
+        }
+    }
+
+    /** メンション判定用にルーム参加メンバーの名前一覧を取得する */
+    private fun loadMembers() {
+        viewModelScope.launch {
+            val members = chatRepository.getRoomMembers(roomId)
+            _uiState.update { it.copy(memberNames = members.map { member -> member.userName }) }
         }
     }
 

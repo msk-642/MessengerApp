@@ -1,7 +1,9 @@
 package com.example.messengerapp.ui.screen.chatroom
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +24,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.messengerapp.domain.model.ChatMessage
@@ -29,6 +33,7 @@ import com.example.messengerapp.domain.model.MessageType
 import com.example.messengerapp.ui.screen.chatroom.camera.CameraCaptureScreen
 import com.example.messengerapp.ui.screen.chatroom.camera.PhotoPreviewScreen
 import com.example.messengerapp.util.ImageMessageCodec
+import com.example.messengerapp.util.MentionParser
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -80,7 +85,7 @@ private fun ChatRoomContent(
     onLoadOlderMessages: () -> Unit,
     onOpenCamera: () -> Unit
 ) {
-    var inputText by remember { mutableStateOf("") }
+    var inputText by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val listItems = uiState.listItems
@@ -122,60 +127,92 @@ private fun ChatRoomContent(
             }
         },
         bottomBar = {
+            // 入力途中のメンションクエリと、それに前方一致するサジェスト候補
+            val mentionQuery = MentionParser.findActiveMentionQuery(
+                text = inputText.text,
+                cursorPosition = inputText.selection.end
+            )
+            val mentionSuggestions = if (mentionQuery != null) {
+                uiState.memberNames.filter { it.startsWith(mentionQuery.query) }
+            } else {
+                emptyList()
+            }
+
             Surface(
                 tonalElevation = 8.dp,
                 shadowElevation = 8.dp
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
                         .navigationBarsPadding()
-                        .imePadding(),
-                    verticalAlignment = Alignment.CenterVertically
+                        .imePadding()
                 ) {
-                    IconButton(onClick = onOpenCamera) {
-                        Icon(
-                            Icons.Outlined.PhotoCamera,
-                            contentDescription = "カメラを起動",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    if (mentionQuery != null && mentionSuggestions.isNotEmpty()) {
+                        MentionSuggestionList(
+                            suggestions = mentionSuggestions,
+                            onSelect = { memberName ->
+                                val (newText, newCursor) = MentionParser.completeMention(
+                                    text = inputText.text,
+                                    query = mentionQuery,
+                                    memberName = memberName
+                                )
+                                inputText = TextFieldValue(newText, TextRange(newCursor))
+                            }
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("メッセージを入力") },
-                        shape = RoundedCornerShape(28.dp),
-                        maxLines = 4,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                        )
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    FloatingActionButton(
-                        onClick = {
-                            if (inputText.isNotBlank()) {
-                                focusManager.clearFocus()
-                                onSendMessage(inputText)
-                                inputText = ""
-                            }
-                        },
-                        modifier = Modifier.size(48.dp),
-                        shape = CircleShape,
-                        containerColor = if (inputText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (inputText.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        elevation = FloatingActionButtonDefaults.elevation(0.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "送信",
-                            modifier = Modifier.size(20.dp)
+                        IconButton(onClick = onOpenCamera) {
+                            Icon(
+                                Icons.Outlined.PhotoCamera,
+                                contentDescription = "カメラを起動",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("メッセージを入力") },
+                            shape = RoundedCornerShape(28.dp),
+                            maxLines = 4,
+                            visualTransformation = remember(uiState.memberNames) {
+                                MentionVisualTransformation(uiState.memberNames)
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                            )
                         )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        FloatingActionButton(
+                            onClick = {
+                                if (inputText.text.isNotBlank()) {
+                                    focusManager.clearFocus()
+                                    onSendMessage(inputText.text)
+                                    inputText = TextFieldValue("")
+                                }
+                            },
+                            modifier = Modifier.size(48.dp),
+                            shape = CircleShape,
+                            containerColor = if (inputText.text.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (inputText.text.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            elevation = FloatingActionButtonDefaults.elevation(0.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "送信",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -216,7 +253,9 @@ private fun ChatRoomContent(
                             is ChatRoomListItem.UnreadBoundary -> UnreadBoundaryItem()
                             is ChatRoomListItem.Message -> MessageBubble(
                                 message = item.message,
-                                isMyMessage = item.message.senderId == uiState.myUserId
+                                isMyMessage = item.message.senderId == uiState.myUserId,
+                                memberNames = uiState.memberNames,
+                                myUserName = uiState.myUserName
                             )
                         }
                     }
@@ -269,10 +308,39 @@ private fun UnreadBoundaryItem() {
     }
 }
 
+/** メンションサジェストの候補一覧（入力欄の上に表示） */
+@Composable
+private fun MentionSuggestionList(
+    suggestions: List<String>,
+    onSelect: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        HorizontalDivider()
+        suggestions.forEach { memberName ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(memberName) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "@$memberName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MentionColors.Member
+                )
+            }
+        }
+        HorizontalDivider()
+    }
+}
+
 @Composable
 private fun MessageBubble(
     message: ChatMessage,
-    isMyMessage: Boolean
+    isMyMessage: Boolean,
+    memberNames: List<String>,
+    myUserName: String
 ) {
     val horizontalArrangement = if (isMyMessage) Arrangement.End else Arrangement.Start
     val bubbleColor = if (isMyMessage)
@@ -287,6 +355,10 @@ private fun MessageBubble(
         RoundedCornerShape(16.dp, 4.dp, 16.dp, 16.dp)
     else
         RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp)
+
+    // 自分がメンションされているメッセージはバブルを別色で縁取る
+    val isSelfMentioned = message.messageType == MessageType.TEXT &&
+        containsSelfMention(message.body, memberNames, myUserName)
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -306,12 +378,18 @@ private fun MessageBubble(
             }
             Surface(
                 shape = bubbleShape,
-                color = bubbleColor
+                color = bubbleColor,
+                border = if (isSelfMentioned) BorderStroke(2.dp, MentionColors.Self) else null
             ) {
                 when (message.messageType) {
                     MessageType.IMAGE -> ImageMessageContent(message, textColor)
                     MessageType.TEXT -> Text(
-                        text = message.body,
+                        text = buildMentionAnnotatedString(
+                            body = message.body,
+                            memberNames = memberNames,
+                            myUserName = myUserName,
+                            isMyMessage = isMyMessage
+                        ),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         color = textColor,
                         style = MaterialTheme.typography.bodyMedium
