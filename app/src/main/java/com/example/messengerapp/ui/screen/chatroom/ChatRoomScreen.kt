@@ -71,6 +71,7 @@ fun ChatRoomScreen(
             photoJpeg = uiState.capturedPhotoJpeg,
             isSending = uiState.isSending,
             onBack = viewModel::backToCamera,
+            onClose = viewModel::closeCamera,
             onSend = viewModel::sendPhotoMessage
         )
     }
