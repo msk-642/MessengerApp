@@ -32,6 +32,7 @@ import com.example.messengerapp.domain.model.ChatMessage
 import com.example.messengerapp.domain.model.MessageType
 import com.example.messengerapp.ui.screen.chatroom.camera.CameraCaptureScreen
 import com.example.messengerapp.ui.screen.chatroom.camera.PhotoPreviewScreen
+import com.example.messengerapp.ui.screen.chatroom.imageviewer.ImageViewerScreen
 import com.example.messengerapp.util.ImageMessageCodec
 import com.example.messengerapp.util.MentionParser
 import java.text.SimpleDateFormat
@@ -51,13 +52,14 @@ fun ChatRoomScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    when (uiState.displayState) {
+    when (val displayState = uiState.displayState) {
         ChatRoomDisplayState.Chat -> ChatRoomContent(
             uiState = uiState,
             onNavigateBack = onNavigateBack,
             onSendMessage = viewModel::sendMessage,
             onLoadOlderMessages = viewModel::loadOlderMessages,
-            onOpenCamera = viewModel::openCamera
+            onOpenCamera = viewModel::openCamera,
+            onImageClick = viewModel::openImageViewer
         )
 
         ChatRoomDisplayState.Camera -> CameraCaptureScreen(
@@ -74,6 +76,11 @@ fun ChatRoomScreen(
             onClose = viewModel::closeCamera,
             onSend = viewModel::sendPhotoMessage
         )
+
+        is ChatRoomDisplayState.ImageViewer -> ImageViewerScreen(
+            imageBase64 = displayState.imageBase64,
+            onClose = viewModel::closeImageViewer
+        )
     }
 }
 
@@ -84,7 +91,8 @@ private fun ChatRoomContent(
     onNavigateBack: () -> Unit,
     onSendMessage: (String) -> Unit,
     onLoadOlderMessages: () -> Unit,
-    onOpenCamera: () -> Unit
+    onOpenCamera: () -> Unit,
+    onImageClick: (ChatMessage) -> Unit
 ) {
     var inputText by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
@@ -256,7 +264,8 @@ private fun ChatRoomContent(
                                 message = item.message,
                                 isMyMessage = item.message.senderId == uiState.myUserId,
                                 memberNames = uiState.memberNames,
-                                myUserName = uiState.myUserName
+                                myUserName = uiState.myUserName,
+                                onImageClick = onImageClick
                             )
                         }
                     }
@@ -341,7 +350,8 @@ private fun MessageBubble(
     message: ChatMessage,
     isMyMessage: Boolean,
     memberNames: List<String>,
-    myUserName: String
+    myUserName: String,
+    onImageClick: (ChatMessage) -> Unit
 ) {
     val horizontalArrangement = if (isMyMessage) Arrangement.End else Arrangement.Start
     val bubbleColor = if (isMyMessage)
@@ -383,7 +393,11 @@ private fun MessageBubble(
                 border = if (isSelfMentioned) BorderStroke(2.dp, MentionColors.Self) else null
             ) {
                 when (message.messageType) {
-                    MessageType.IMAGE -> ImageMessageContent(message, textColor)
+                    MessageType.IMAGE -> ImageMessageContent(
+                        message = message,
+                        textColor = textColor,
+                        onClick = { onImageClick(message) }
+                    )
                     MessageType.TEXT -> Text(
                         text = buildMentionAnnotatedString(
                             body = message.body,
@@ -414,7 +428,8 @@ private fun MessageBubble(
 @Composable
 private fun ImageMessageContent(
     message: ChatMessage,
-    textColor: androidx.compose.ui.graphics.Color
+    textColor: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
 ) {
     val imageBitmap = remember(message.messageId) {
         message.imageBase64?.let { ImageMessageCodec.decodeBase64ToImageBitmap(it) }
@@ -426,7 +441,8 @@ private fun ImageMessageContent(
             contentDescription = "写真メッセージ",
             modifier = Modifier
                 .width(220.dp)
-                .aspectRatio(aspectRatio),
+                .aspectRatio(aspectRatio)
+                .clickable(onClick = onClick),
             contentScale = ContentScale.Fit
         )
     } else {

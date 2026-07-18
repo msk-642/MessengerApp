@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.messengerapp.util.ImageMessageCodec
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * 撮影結果確認画面。
@@ -58,11 +59,11 @@ fun PhotoPreviewScreen(
         photoJpeg?.let { ImageMessageCodec.decodeJpegToImageBitmap(it) }
     }
 
-    // スワイプダウン dismiss の状態
+    // 上下スワイプ dismiss の状態（画像ビューアの等倍スワイプ dismiss と同一の処理）
     val dismissThresholdPx = with(LocalDensity.current) { DISMISS_THRESHOLD_DP.dp.toPx() }
     val dragOffsetY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    val progress = (dragOffsetY.value / dismissThresholdPx).coerceIn(0f, 1f)
+    val progress = (abs(dragOffsetY.value) / dismissThresholdPx).coerceIn(0f, 1f)
 
     Box(
         modifier = Modifier
@@ -74,12 +75,12 @@ fun PhotoPreviewScreen(
                 detectVerticalDragGestures(
                     onVerticalDrag = { _, dragAmount ->
                         scope.launch {
-                            // 下方向のみ追従させる
-                            dragOffsetY.snapTo((dragOffsetY.value + dragAmount).coerceAtLeast(0f))
+                            // 上下どちらの方向も dismiss として扱う
+                            dragOffsetY.snapTo(dragOffsetY.value + dragAmount)
                         }
                     },
                     onDragEnd = {
-                        if (dragOffsetY.value >= dismissThresholdPx) {
+                        if (abs(dragOffsetY.value) >= dismissThresholdPx) {
                             // 規定距離までスワイプされたらチャットルーム画面へ
                             onClose()
                         } else {
@@ -92,13 +93,12 @@ fun PhotoPreviewScreen(
                 )
             }
     ) {
-        // スワイプ距離に比例して等倍縮小（scaleX = scaleY のためアスペクト比は維持される）
+        // スワイプ距離に比例して中央のまま等倍縮小（scaleX = scaleY のためアスペクト比は維持される）
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
                     val scale = 1f - progress * MAX_SHRINK
-                    translationY = dragOffsetY.value
                     scaleX = scale
                     scaleY = scale
                 }
@@ -174,8 +174,8 @@ fun PhotoPreviewScreen(
     }
 }
 
-/** スワイプ dismiss の規定距離(dp)。この距離に達したらチャットルーム画面へ遷移する */
-private const val DISMISS_THRESHOLD_DP = 200
+/** スワイプ dismiss の規定距離(dp)。画像ビューアと同一値。この距離に達したらチャットルーム画面へ遷移する */
+private const val DISMISS_THRESHOLD_DP = 150
 
-/** 規定距離到達時の縮小量（1f - MAX_SHRINK = 60% サイズまで縮小） */
-private const val MAX_SHRINK = 0.4f
+/** 規定距離到達時の縮小量（画像ビューアと同一値。1f - MAX_SHRINK = 70% サイズまで縮小） */
+private const val MAX_SHRINK = 0.3f
