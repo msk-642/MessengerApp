@@ -11,6 +11,9 @@ sealed interface ChatRoomDisplayState {
 
     /** 撮影結果確認画面 */
     data object PhotoPreview : ChatRoomDisplayState
+
+    /** 写真メッセージの拡大表示 */
+    data class ImageViewer(val imageBase64: String) : ChatRoomDisplayState
 }
 
 /** カメラ画面の設定状態（撮影 → 確認 → 戻る のあいだ保持される） */

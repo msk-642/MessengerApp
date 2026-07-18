@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.messengerapp.domain.model.ChatMessage
+import com.example.messengerapp.domain.model.MessageType
 import com.example.messengerapp.domain.repository.AuthRepository
 import com.example.messengerapp.domain.repository.ChatRepository
 import com.example.messengerapp.util.ImageMessageCodec
@@ -198,6 +199,20 @@ class ChatRoomViewModel @Inject constructor(
     /** カメラ画面での設定変更（ズーム・フラッシュ・露光）を保持する */
     fun updateCameraSettings(settings: CameraSettings) {
         _uiState.update { it.copy(cameraSettings = settings) }
+    }
+
+    /** 写真メッセージをタップして拡大表示を開く */
+    fun openImageViewer(message: ChatMessage) {
+        val imageBase64 = message.imageBase64
+        if (message.messageType != MessageType.IMAGE || imageBase64 == null) return
+        _uiState.update {
+            it.copy(displayState = ChatRoomDisplayState.ImageViewer(imageBase64))
+        }
+    }
+
+    /** 拡大表示を閉じてチャット画面へ戻る */
+    fun closeImageViewer() {
+        _uiState.update { it.copy(displayState = ChatRoomDisplayState.Chat) }
     }
 
     /** 撮影画像を送信形式(Base64)へ変換して写真メッセージとして送信する */
