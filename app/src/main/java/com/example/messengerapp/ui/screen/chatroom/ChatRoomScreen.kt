@@ -362,10 +362,13 @@ private fun MessageBubble(
         MaterialTheme.colorScheme.onPrimaryContainer
     else
         MaterialTheme.colorScheme.onSurfaceVariant
-    val bubbleShape = if (isMyMessage)
-        RoundedCornerShape(16.dp, 4.dp, 16.dp, 16.dp)
-    else
-        RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp)
+    // テキストは本体 + 尻尾を 1 つの Shape として扱う吹き出し形状、画像は尻尾なしの角丸矩形
+    val bubbleShape = if (message.messageType == MessageType.IMAGE) {
+        RoundedCornerShape(16.dp)
+    } else {
+        MessageBubbleShape(isMyMessage)
+    }
+    val tailPadding = BUBBLE_TAIL_WIDTH_DP.dp
 
     // 自分がメンションされているメッセージはバブルを別色で縁取る
     val isSelfMentioned = message.messageType == MessageType.TEXT &&
@@ -405,7 +408,13 @@ private fun MessageBubble(
                             myUserName = myUserName,
                             isMyMessage = isMyMessage
                         ),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        // 尻尾側はコンテンツが重ならないよう尻尾幅ぶん余分にパディングする
+                        modifier = Modifier.padding(
+                            start = if (isMyMessage) 12.dp else 12.dp + tailPadding,
+                            end = if (isMyMessage) 12.dp + tailPadding else 12.dp,
+                            top = 8.dp,
+                            bottom = 8.dp
+                        ),
                         color = textColor,
                         style = MaterialTheme.typography.bodyMedium
                     )
