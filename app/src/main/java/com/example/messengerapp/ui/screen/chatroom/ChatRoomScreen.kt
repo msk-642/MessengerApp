@@ -126,7 +126,7 @@ private fun ChatRoomContent(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る")
                     }
                     Text(
-                        text = "MessengerApp.Chat_Room",
+                        text = uiState.roomName,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         modifier = Modifier.padding(start = 8.dp)

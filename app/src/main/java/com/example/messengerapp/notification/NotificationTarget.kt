@@ -1,6 +1,7 @@
 package com.example.messengerapp.notification
 
 import android.content.Intent
+import android.os.Bundle
 
 /**
  * プッシュ通知タップ時の遷移先。
@@ -44,6 +45,25 @@ sealed interface NotificationTarget {
         fun writeExtras(intent: Intent, data: Map<String, String>) {
             data[KEY_TYPE]?.let { intent.putExtra(KEY_TYPE, it) }
             data[KEY_ARG]?.let { intent.putExtra(KEY_ARG, it) }
+        }
+
+        /**
+         * 通知本体（`Notification.extras`）から遷移先を復元する。
+         *
+         * PendingIntent の中身は保持側から読み出せないため、表示中の通知が
+         * どの画面向けだったかを知るには通知自身に同じ情報を持たせる必要がある。
+         * 書き込みは [writeBundle]、走査は
+         * [com.example.messengerapp.notification.NotificationCanceler] が行う。
+         */
+        fun fromBundle(extras: Bundle?): NotificationTarget? {
+            val type = extras?.getString(KEY_TYPE) ?: return null
+            return resolve(type, extras.getString(KEY_ARG))
+        }
+
+        /** [fromBundle] で復元できるよう、通知 extras へ遷移先情報を書き込む。 */
+        fun writeBundle(bundle: Bundle, data: Map<String, String>) {
+            data[KEY_TYPE]?.let { bundle.putString(KEY_TYPE, it) }
+            data[KEY_ARG]?.let { bundle.putString(KEY_ARG, it) }
         }
 
         private fun resolve(type: String, arg: String?): NotificationTarget? = when (type) {

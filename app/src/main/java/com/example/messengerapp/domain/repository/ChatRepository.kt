@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface ChatRepository {
     fun getChatRoomsStream(): Flow<List<ChatRoom>>
+    suspend fun getRoomName(roomId: String): String
     suspend fun getMessages(roomId: String): List<ChatMessage>
     suspend fun getMessagesBefore(roomId: String, beforeMessageId: String, beforeSentAt: Long): List<ChatMessage>
     suspend fun getLastReadAt(roomId: String): Long
