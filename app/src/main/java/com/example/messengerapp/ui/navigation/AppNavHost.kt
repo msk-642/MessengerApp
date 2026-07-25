@@ -8,6 +8,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -51,6 +53,22 @@ fun AppNavHost(
         if (!isInMainGraph) return@LaunchedEffect
         navigateToTarget(navController, target)
         mainViewModel.onTargetConsumed()
+    }
+
+    // 通知バナーをタップせず自力で該当画面に到達した場合の、通知の自動取り下げ。
+    // navBackStackEntry の差し替え（＝画面遷移）で再起動し、その entry が RESUMED になるたびに発火する。
+    // NavBackStackEntry の Lifecycle は Activity 停止で RESUMED を外れるため、
+    // 同じ画面を表示したままフォアグラウンド復帰した場合もここを通る。
+    LaunchedEffect(navBackStackEntry) {
+        val entry = navBackStackEntry ?: return@LaunchedEffect
+        val target = notificationTargetOf(
+            route = entry.destination.route,
+            roomId = entry.arguments?.getString(Routes.Main.CHAT_ROOM_ARG)
+        ) ?: return@LaunchedEffect
+
+        entry.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            mainViewModel.onScreenShown(target)
+        }
     }
 
     Scaffold(

@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.messengerapp.notification.NotificationTarget
@@ -103,6 +104,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     NotificationCompat.PRIORITY_DEFAULT
             )
             .setContentIntent(pendingIntent)
+            // PendingIntent の extras は保持側から読み出せないため、遷移先情報を通知本体にも持たせる。
+            // 画面到達による自動取り下げ（NotificationCanceler）がこれを走査する。
+            .addExtras(Bundle().apply { NotificationTarget.writeBundle(this, data) })
             .build()
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
