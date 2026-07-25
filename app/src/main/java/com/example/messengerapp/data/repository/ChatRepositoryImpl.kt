@@ -9,9 +9,11 @@ import com.example.messengerapp.domain.model.Friend
 import com.example.messengerapp.domain.model.MessageType
 import com.example.messengerapp.domain.repository.AuthRepository
 import com.example.messengerapp.domain.repository.ChatRepository
+import com.example.messengerapp.notification.NotificationTarget
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +26,16 @@ class ChatRepositoryImpl @Inject constructor(
     private val _chatRooms = MutableStateFlow(createMockRooms())
 
     override fun getChatRoomsStream(): Flow<List<ChatRoom>> = _chatRooms.asStateFlow()
+
+    override suspend fun getRoomName(roomId: String): String {
+        // Flow が流すのは ChatRoom 単体ではなくルーム一覧。first() で現在の一覧を取り出してから探す。
+        // 元が StateFlow（完了しない Flow）なので、該当なしを例外ではなく空文字で返す。
+        return getChatRoomsStream()
+            .first()
+            .firstOrNull { it.roomId == roomId }
+            ?.roomName
+            .orEmpty()
+    }
 
     override suspend fun getMessages(roomId: String): List<ChatMessage> {
         return try {

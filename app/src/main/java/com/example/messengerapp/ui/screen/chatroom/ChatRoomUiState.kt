@@ -26,6 +26,8 @@ data class CameraSettings(
 /** チャットルーム画面の UI 状態 */
 @Suppress("ArrayInDataClass")
 data class ChatRoomUiState(
+    /** ルーム情報 */
+    val roomName: String = "",
     /** 日付区切り・未読境界を含む表示用リスト */
     val listItems: List<ChatRoomListItem> = emptyList(),
     val myUserId: String = "",

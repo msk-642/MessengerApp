@@ -43,6 +43,7 @@ class ChatRoomViewModel @Inject constructor(
     init {
         loadSession()
         loadReadState()
+        loadRoomName()
         loadMessages()
         loadMembers()
     }
@@ -57,6 +58,14 @@ class ChatRoomViewModel @Inject constructor(
                 )
             }
             rebuildListItems()
+        }
+    }
+
+    /** ルーム情報を設定する */
+    private fun loadRoomName() {
+        viewModelScope.launch {
+            val roomName = chatRepository.getRoomName(roomId)
+            _uiState.update { it.copy(roomName = roomName) }
         }
     }
 
