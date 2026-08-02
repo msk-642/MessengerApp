@@ -18,3 +18,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "MessengerApp"
 include(":app")
+include(":server")

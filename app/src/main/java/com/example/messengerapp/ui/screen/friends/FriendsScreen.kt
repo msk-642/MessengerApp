@@ -14,12 +14,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.messengerapp.domain.model.Friend
+import com.example.messengerapp.ui.components.ErrorRetry
 
 @Composable
 fun FriendsScreen(
     viewModel: FriendsViewModel = hiltViewModel()
 ) {
-    val friends by viewModel.friends.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -39,14 +40,29 @@ fun FriendsScreen(
             }
         }
     ) { innerPadding ->
-        if (friends.isEmpty()) {
+        val errorMessage = uiState.errorMessage
+        if (errorMessage != null) {
+            ErrorRetry(
+                message = errorMessage,
+                onRetry = { viewModel.loadFriends() },
+                modifier = Modifier.padding(innerPadding)
+            )
+        } else if (uiState.friends.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                if (uiState.isLoading) {
+                    CircularProgressIndicator()
+                } else {
+                    Text(
+                        text = "友だちがいません",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -57,7 +73,7 @@ fun FriendsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(
-                    items = friends,
+                    items = uiState.friends,
                     key = { it.userId }
                 ) { friend ->
                     FriendItem(friend = friend)

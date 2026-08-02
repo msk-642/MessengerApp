@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.io.IOException
 
 class AuthRepositoryImplTest {
 
@@ -34,16 +35,16 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun `login failure with exception falls back to dummy session`() = runTest {
+    fun `login failure propagates as Result failure without touching dataStore`() = runTest {
         val userId = "testUser"
-        coEvery { authApi.login(any()) } throws Exception("Network error")
-        coEvery { dataStore.updateData(any()) } returns UserSession() // dummy return
+        coEvery { authApi.login(any()) } throws IOException("Network error")
 
         val result = repository.login(userId)
 
-        assert(result.isSuccess)
-        assertEquals("dummy_token_12345", result.getOrNull()?.token)
-        coVerify { dataStore.updateData(any()) }
+        // ダミーセッションへのフォールバックは撤去済み。失敗はそのまま呼び出し元へ返る
+        assert(result.isFailure)
+        assert(result.exceptionOrNull() is IOException)
+        coVerify(exactly = 0) { dataStore.updateData(any()) }
     }
 
     @Test

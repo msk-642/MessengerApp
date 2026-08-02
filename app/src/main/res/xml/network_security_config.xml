@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  targetSdk 28 以降、平文 HTTP はデフォルトで拒否される。
+  開発用のローカルサーバ（:server モジュール）へ繋ぐためにここだけ平文を許可する。
+  usesCleartextTraffic="true" による全許可は行わない（他のドメインは HTTPS 必須のまま）。
+
+  実機を LAN 経由で繋ぐ場合は、PC の LAN IP（例: 192.168.1.10）を <domain> に追記する。
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Android エミュレータから見たホスト PC -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

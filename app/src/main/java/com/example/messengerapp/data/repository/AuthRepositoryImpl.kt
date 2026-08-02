@@ -15,28 +15,16 @@ class AuthRepositoryImpl @Inject constructor(
     private val dataStore: DataStore<UserSession>
 ) : AuthRepository {
 
-    override suspend fun login(userId: String): Result<UserSession> {
-        return try {
-            val response = authApi.login(LoginRequest(userId = userId))
-            val session = UserSession(
-                token = response.token,
-                userId = response.userId,
-                userName = response.userName,
-                isAutoLoginEnabled = true
-            )
-            updateSession(session)
-            Result.success(session)
-        } catch (e: Exception) {
-            // プロトタイプ用フォールバック：サーバーが未起動でもデモ動作可能にする（本番では削除）
-            val dummySession = UserSession(
-                token = "dummy_token_12345",
-                userId = userId,
-                userName = "Dummy User ($userId)",
-                isAutoLoginEnabled = true
-            )
-            updateSession(dummySession)
-            Result.success(dummySession)
-        }
+    override suspend fun login(userId: String): Result<UserSession> = runCatching {
+        val response = authApi.login(LoginRequest(userId = userId))
+        val session = UserSession(
+            token = response.token,
+            userId = response.userId,
+            userName = response.userName,
+            isAutoLoginEnabled = true
+        )
+        updateSession(session)
+        session
     }
 
     override suspend fun logout() {

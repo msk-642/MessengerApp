@@ -5,4 +5,8 @@ plugins {
     id("com.google.gms.google-services") version "4.4.4" apply false
     alias(libs.plugins.hilt.android.plugin) apply false
     alias(libs.plugins.ksp) apply false
+
+    // :server（Ktor / JVM モジュール）用
+    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
 }

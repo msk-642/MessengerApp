@@ -16,6 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.messengerapp.domain.model.ChatRoom
+import com.example.messengerapp.ui.components.ErrorRetry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -25,7 +26,7 @@ fun ChatListScreen(
     onNavigateToChatRoom: (String) -> Unit,
     viewModel: ChatListViewModel = hiltViewModel()
 ) {
-    val chatRooms by viewModel.chatRooms.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -60,14 +61,29 @@ fun ChatListScreen(
             }
         }
     ) { innerPadding ->
-        if (chatRooms.isEmpty()) {
+        val errorMessage = uiState.errorMessage
+        if (errorMessage != null && uiState.rooms.isEmpty()) {
+            ErrorRetry(
+                message = errorMessage,
+                onRetry = { viewModel.refresh() },
+                modifier = Modifier.padding(innerPadding)
+            )
+        } else if (uiState.rooms.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                if (uiState.isLoading) {
+                    CircularProgressIndicator()
+                } else {
+                    Text(
+                        text = "トークルームがありません",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -78,7 +94,7 @@ fun ChatListScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(
-                    items = chatRooms,
+                    items = uiState.rooms,
                     key = { it.roomId }
                 ) { room ->
                     TalkWindowItem(
