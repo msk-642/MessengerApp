@@ -3,6 +3,7 @@
 /build
 /captures
 /app/build
+/server/build
 .externalNativeBuild
 .cxx
 *.apk

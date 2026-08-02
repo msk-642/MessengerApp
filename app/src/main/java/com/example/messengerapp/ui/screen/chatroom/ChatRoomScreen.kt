@@ -51,35 +51,52 @@ fun ChatRoomScreen(
     viewModel: ChatRoomViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    when (val displayState = uiState.displayState) {
-        ChatRoomDisplayState.Chat -> ChatRoomContent(
-            uiState = uiState,
-            onNavigateBack = onNavigateBack,
-            onSendMessage = viewModel::sendMessage,
-            onLoadOlderMessages = viewModel::loadOlderMessages,
-            onOpenCamera = viewModel::openCamera,
-            onImageClick = viewModel::openImageViewer
-        )
+    // 撮影結果確認画面での送信失敗も拾えるよう、Snackbar は表示中画面より外側に置く
+    LaunchedEffect(uiState.errorMessage) {
+        val message = uiState.errorMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeError()
+    }
 
-        ChatRoomDisplayState.Camera -> CameraCaptureScreen(
-            cameraSettings = uiState.cameraSettings,
-            onSettingsChange = viewModel::updateCameraSettings,
-            onPhotoCaptured = viewModel::onPhotoCaptured,
-            onClose = viewModel::closeCamera
-        )
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (val displayState = uiState.displayState) {
+            ChatRoomDisplayState.Chat -> ChatRoomContent(
+                uiState = uiState,
+                onNavigateBack = onNavigateBack,
+                onSendMessage = viewModel::sendMessage,
+                onLoadOlderMessages = viewModel::loadOlderMessages,
+                onOpenCamera = viewModel::openCamera,
+                onImageClick = viewModel::openImageViewer
+            )
 
-        ChatRoomDisplayState.PhotoPreview -> PhotoPreviewScreen(
-            photoJpeg = uiState.capturedPhotoJpeg,
-            isSending = uiState.isSending,
-            onBack = viewModel::backToCamera,
-            onClose = viewModel::closeCamera,
-            onSend = viewModel::sendPhotoMessage
-        )
+            ChatRoomDisplayState.Camera -> CameraCaptureScreen(
+                cameraSettings = uiState.cameraSettings,
+                onSettingsChange = viewModel::updateCameraSettings,
+                onPhotoCaptured = viewModel::onPhotoCaptured,
+                onClose = viewModel::closeCamera
+            )
 
-        is ChatRoomDisplayState.ImageViewer -> ImageViewerScreen(
-            imageBase64 = displayState.imageBase64,
-            onClose = viewModel::closeImageViewer
+            ChatRoomDisplayState.PhotoPreview -> PhotoPreviewScreen(
+                photoJpeg = uiState.capturedPhotoJpeg,
+                isSending = uiState.isSending,
+                onBack = viewModel::backToCamera,
+                onClose = viewModel::closeCamera,
+                onSend = viewModel::sendPhotoMessage
+            )
+
+            is ChatRoomDisplayState.ImageViewer -> ImageViewerScreen(
+                imageBase64 = displayState.imageBase64,
+                onClose = viewModel::closeImageViewer
+            )
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
         )
     }
 }

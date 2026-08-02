@@ -38,6 +38,8 @@ data class ChatRoomUiState(
     val isLoadingOlder: Boolean = false,
     val displayState: ChatRoomDisplayState = ChatRoomDisplayState.Chat,
     val cameraSettings: CameraSettings = CameraSettings(),
+    /** 通信失敗の内容。Snackbar で通知し、表示後に [ChatRoomViewModel.consumeError] で消す */
+    val errorMessage: String? = null,
     /** 撮影した JPEG（メモリ保持のみ。ストレージには保存しない。参照同一性での比較で十分） */
     val capturedPhotoJpeg: ByteArray? = null
 )

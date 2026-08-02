@@ -7,6 +7,7 @@ import com.example.messengerapp.domain.model.ChatMessage
 import com.example.messengerapp.domain.model.MessageType
 import com.example.messengerapp.domain.repository.AuthRepository
 import com.example.messengerapp.domain.repository.ChatRepository
+import com.example.messengerapp.util.ErrorMessages
 import com.example.messengerapp.util.ImageMessageCodec
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -64,31 +65,55 @@ class ChatRoomViewModel @Inject constructor(
     /** ルーム情報を設定する */
     private fun loadRoomName() {
         viewModelScope.launch {
-            val roomName = chatRepository.getRoomName(roomId)
-            _uiState.update { it.copy(roomName = roomName) }
+            chatRepository.getRoomName(roomId)
+                .onSuccess { roomName -> _uiState.update { it.copy(roomName = roomName) } }
+                .onFailure(::showError)
         }
     }
 
     /** メンション判定用にルーム参加メンバーの名前一覧を取得する */
     private fun loadMembers() {
         viewModelScope.launch {
-            val members = chatRepository.getRoomMembers(roomId)
-            _uiState.update { it.copy(memberNames = members.map { member -> member.userName }) }
+            chatRepository.getRoomMembers(roomId)
+                .onSuccess { members ->
+                    _uiState.update {
+                        it.copy(memberNames = members.map { member -> member.userName })
+                    }
+                }
+                .onFailure(::showError)
         }
     }
 
     private fun loadReadState() {
         viewModelScope.launch {
-            lastReadAt = chatRepository.getLastReadAt(roomId)
-            rebuildListItems()
+            chatRepository.getLastReadAt(roomId)
+                .onSuccess {
+                    lastReadAt = it
+                    rebuildListItems()
+                }
+                .onFailure(::showError)
         }
     }
 
     private fun loadMessages() {
         viewModelScope.launch {
-            messages = chatRepository.getMessages(roomId)
-            rebuildListItems()
+            chatRepository.getMessages(roomId)
+                .onSuccess {
+                    messages = it
+                    rebuildListItems()
+                }
+                .onFailure(::showError)
         }
+    }
+
+    /** 通信失敗を Snackbar 用のメッセージとして載せる */
+    private fun showError(throwable: Throwable) {
+        _uiState.update { it.copy(errorMessage = ErrorMessages.from(throwable)) }
+    }
+
+    /** Snackbar を表示し終えたら呼ぶ。同じエラーが再度起きたときに再表示できるようにする */
+    fun consumeError() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
     /** messages / lastReadAt / myUserId の変更を表示用リストへ反映する */
@@ -142,15 +167,15 @@ class ChatRoomViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingOlder = true) }
             val startedAt = System.currentTimeMillis()
             try {
-                val older = chatRepository.getMessagesBefore(
+                chatRepository.getMessagesBefore(
                     roomId = roomId,
-                    beforeMessageId = oldest.messageId,
-                    beforeSentAt = oldest.sentAt
-                )
-                messages = (older + messages)
-                    .distinctBy { it.messageId }
-                    .sortedBy { it.sentAt }
-                rebuildListItems()
+                    beforeMessageId = oldest.messageId
+                ).onSuccess { older ->
+                    messages = (older + messages)
+                        .distinctBy { it.messageId }
+                        .sortedBy { it.sentAt }
+                    rebuildListItems()
+                }.onFailure(::showError)
             } finally {
                 // 取得が一瞬で終わると UI 側が true への遷移を観測できず
                 // インジケータが消えなくなるため、最低表示時間を確保する
@@ -167,9 +192,12 @@ class ChatRoomViewModel @Inject constructor(
         if (body.isBlank()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isSending = true) }
-            val sent = chatRepository.sendMessage(roomId, body)
-            messages = messages + sent
-            rebuildListItems()
+            chatRepository.sendMessage(roomId, body)
+                .onSuccess { sent ->
+                    messages = messages + sent
+                    rebuildListItems()
+                }
+                .onFailure(::showError)
             _uiState.update { it.copy(isSending = false) }
         }
     }
@@ -233,16 +261,23 @@ class ChatRoomViewModel @Inject constructor(
             val imageBase64 = withContext(Dispatchers.Default) {
                 ImageMessageCodec.encodeJpegBytesToBase64(jpeg)
             }
-            val sent = chatRepository.sendImageMessage(roomId, imageBase64)
-            messages = messages + sent
-            rebuildListItems()
-            _uiState.update {
-                it.copy(
-                    isSending = false,
-                    displayState = ChatRoomDisplayState.Chat,
-                    capturedPhotoJpeg = null
-                )
-            }
+            chatRepository.sendImageMessage(roomId, imageBase64)
+                .onSuccess { sent ->
+                    messages = messages + sent
+                    rebuildListItems()
+                    _uiState.update {
+                        it.copy(
+                            isSending = false,
+                            displayState = ChatRoomDisplayState.Chat,
+                            capturedPhotoJpeg = null
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    // 撮り直しにならないよう、失敗時は確認画面と撮影データを保持したままにする
+                    showError(throwable)
+                    _uiState.update { it.copy(isSending = false) }
+                }
         }
     }
 

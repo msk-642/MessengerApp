@@ -21,6 +21,11 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // ローカルの :server モジュールの待ち受け先。10.0.2.2 はエミュレータから見たホスト PC。
+        // 実機を LAN 経由で繋ぐ場合はここを PC の LAN IP に変えて
+        // network_security_config.xml にも同じホストを追記する。
+        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8080/\"")
     }
 
     buildTypes {
@@ -38,6 +43,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -87,6 +93,8 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
     implementation(libs.gson)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging.interceptor)
 
     // Firebase Dependencies
     implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
