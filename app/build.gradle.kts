@@ -1,3 +1,6 @@
+import java.security.MessageDigest
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -47,8 +50,63 @@ android {
     }
 }
 
+// サーバ未実装の間、GET /api/v1/app/latest の代わりになる模擬レスポンスを生成する。
+// 生成物は build/ 配下なのでコミットされない（Base64 は APK の約 1.33 倍のサイズになる）。
+val mockUpdateDir = layout.buildDirectory.dir("mock-update")
+
+tasks.register("generateMockUpdatePayload") {
+    group = "build"
+    description = "デバッグ APK から模擬レスポンス JSON を生成する"
+    dependsOn("assembleDebug")
+
+    val apkDir = layout.buildDirectory.dir("outputs/apk/debug")
+    val outDirProvider = mockUpdateDir
+
+    doLast {
+        val apk = apkDir.get().asFile.listFiles()?.firstOrNull { it.name.endsWith(".apk") }
+            ?: error("デバッグ APK が見つかりません: ${apkDir.get().asFile}")
+
+        val outDir = outDirProvider.get().asFile
+        outDir.mkdirs()
+
+        // 復元結果と突き合わせるための原本
+        val apkCopy = outDir.resolve("app-debug.apk")
+        apk.copyTo(apkCopy, overwrite = true)
+
+        // {"resultCode":"0","apkBase64":"...."} 全体が約 106MB になるため、
+        // こちらもメモリへ載せずストリームで組み立てる。apkBase64 は必ず最後のフィールドに置く。
+        val responseFile = outDir.resolve("response.json")
+        responseFile.outputStream().buffered().use { out ->
+            out.write("{\"resultCode\":\"0\",\"apkBase64\":\"".toByteArray(Charsets.UTF_8))
+            // wrap した側を閉じないと Base64 のパディングが書かれないが、閉じると out まで閉じてしまう
+            Base64.getEncoder().wrap(out).use { encoded ->
+                apkCopy.inputStream().buffered().use { it.copyTo(encoded) }
+            }
+        }
+        // そのため JSON の終端は追記で書く
+        responseFile.appendText("\"}", Charsets.UTF_8)
+
+        val digest = MessageDigest.getInstance("SHA-256")
+        apkCopy.inputStream().buffered().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+
+        logger.lifecycle("模擬レスポンスを生成しました: ${outDir.absolutePath}")
+        logger.lifecycle("  APK          : ${apkCopy.length()} bytes")
+        logger.lifecycle("  response.json: ${responseFile.length()} bytes")
+        logger.lifecycle("  SHA-256      : ${digest.digest().joinToString("") { "%02x".format(it) }}")
+    }
+}
+
 tasks.withType<Test> {
     jvmArgs("-XX:+EnableDynamicAgentLoading")
+    // 実 APK のラウンドトリップテストから模擬レスポンスを参照する（未生成ならテストはスキップされる）
+    systemProperty("mockUpdateDir", mockUpdateDir.get().asFile.absolutePath)
 }
 
 dependencies {
