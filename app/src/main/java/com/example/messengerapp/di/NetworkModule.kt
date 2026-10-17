@@ -3,6 +3,7 @@ package com.example.messengerapp.di
 import com.example.messengerapp.BuildConfig
 import com.example.messengerapp.data.remote.AuthApi
 import com.example.messengerapp.data.remote.ChatApi
+import com.example.messengerapp.data.remote.UpdateApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -58,5 +59,11 @@ object NetworkModule {
     @Singleton
     fun provideChatApi(retrofit: Retrofit): ChatApi {
         return retrofit.create(ChatApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideUpdateApi(retrofit: Retrofit): UpdateApi {
+        return retrofit.create(UpdateApi::class.java)
     }
 }

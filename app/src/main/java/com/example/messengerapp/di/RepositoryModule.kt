@@ -1,7 +1,9 @@
 package com.example.messengerapp.di
 
+import com.example.messengerapp.data.repository.AppUpdateRepositoryImpl
 import com.example.messengerapp.data.repository.AuthRepositoryImpl
 import com.example.messengerapp.data.repository.ChatRepositoryImpl
+import com.example.messengerapp.domain.repository.AppUpdateRepository
 import com.example.messengerapp.domain.repository.AuthRepository
 import com.example.messengerapp.domain.repository.ChatRepository
 import dagger.Binds
@@ -25,5 +27,11 @@ abstract class RepositoryModule {
     abstract fun bindChatRepository(
         chatRepositoryImpl: ChatRepositoryImpl
     ): ChatRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAppUpdateRepository(
+        appUpdateRepositoryImpl: AppUpdateRepositoryImpl
+    ): AppUpdateRepository
 
 }
