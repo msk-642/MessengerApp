@@ -48,7 +48,8 @@ object ApkBase64Decoder {
                     decoded.copyTo(output, BUFFER_SIZE)
                 }
             }
-        } catch (e: IOException) {
+        } catch (e: Throwable) {
+            // IOException だけでなく、コルーチンのキャンセルでも中間ファイルを残さない
             working.delete()
             throw e
         }
