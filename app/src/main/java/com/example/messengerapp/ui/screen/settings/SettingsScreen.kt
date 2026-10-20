@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.messengerapp.domain.model.AppUpdateDownload
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,6 +23,7 @@ fun SettingsScreen(
     onLogout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -123,6 +125,13 @@ fun SettingsScreen(
             SettingsItem("プライバシー")
             SettingsItem("テーマ設定")
 
+            AppUpdateSection(
+                state = uiState.download,
+                onStart = viewModel::startUpdate,
+                onCancel = viewModel::cancelUpdate,
+                onDismissResult = viewModel::consumeUpdateResult
+            )
+
             Spacer(modifier = Modifier.weight(1f))
 
             // ログアウトボタン
@@ -140,6 +149,92 @@ fun SettingsScreen(
                 Text("ログアウト", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+/**
+ * アプリ更新のダウンロード状況。
+ *
+ * 実処理は [com.example.messengerapp.service.AppUpdateService] が持っており、
+ * ここはリポジトリの状態を描画するだけ。画面を離れて戻っても進捗は引き継がれる。
+ */
+@Composable
+private fun AppUpdateSection(
+    state: AppUpdateDownload,
+    onStart: () -> Unit,
+    onCancel: () -> Unit,
+    onDismissResult: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "アプリを更新",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            when (state) {
+                AppUpdateDownload.Idle -> {
+                    Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+                        Text("最新版をダウンロード")
+                    }
+                }
+
+                is AppUpdateDownload.Running -> {
+                    val percent = state.percent
+                    if (percent != null) {
+                        LinearProgressIndicator(
+                            progress = { percent / 100f },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text("ダウンロード中 $percent%", style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        // Content-Length が無いと総量が分からないので不定表示にする
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Text(
+                            text = "ダウンロード中 ${state.downloadedBytes / 1024 / 1024} MB",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Text(
+                        text = "アプリを終了すると最初からやり直しになります",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    TextButton(onClick = onCancel) { Text("キャンセル") }
+                }
+
+                is AppUpdateDownload.Succeeded -> {
+                    Text("ダウンロードが完了しました", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = state.apk.absolutePath,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = onDismissResult) { Text("閉じる") }
+                }
+
+                is AppUpdateDownload.Failed -> {
+                    Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // レジュームはしないので、再試行は常に最初からやり直す
+                        Button(onClick = onStart) { Text("再試行") }
+                        TextButton(onClick = onDismissResult) { Text("閉じる") }
+                    }
+                }
+            }
         }
     }
 }

@@ -26,6 +26,10 @@ object ErrorMessages {
             else -> "リクエストが受け付けられませんでした（${throwable.code()}）"
         }
 
+        // IOException の分岐より前に置く（AppUpdateResultCodeException は IOException のため）
+        is AppUpdateResultCodeException ->
+            "サーバがエラーを返しました（コード: ${throwable.resultCode}）"
+
         is IOException -> "通信に失敗しました。ネットワーク状態を確認してください。"
 
         else -> "予期しないエラーが発生しました。"
